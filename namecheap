@@ -1,0 +1,145 @@
+#!/usr/bin/perl
+
+# Copyright (c) 2017 Todd T. Fries <todd@fries.net>
+#
+# Permission to use, copy, modify, and distribute this software for any
+# purpose with or without fee is hereby granted, provided that the above
+# copyright notice and this permission notice appear in all copies.
+#
+# THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+# WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+# MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+# ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+# WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+# ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+# OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+
+use strict;
+use warnings;
+
+use Data::Dumper;
+use Getopt::Std;
+
+use WWW::Namecheap::API;
+use WWW::Namecheap::DNS;
+
+my $conf=$ENV{'HOME'}."/.namecheap.conf";
+
+our $opt_d;		# fqdn to interrogate namecheap about
+our $opt_c = $conf;	# config file
+our $opt_v = 0;		# verbosity
+
+getopts('c:d:');
+
+$conf = $opt_c;
+my $dom = $opt_d;
+
+if (! -f $conf) {
+	die "need a conf file, $conf not found";
+}
+
+my %config;
+
+open(CONF,$conf);
+while(<CONF>) {
+	if (/^\s*#/) {
+		next;
+	}
+	my $line;
+	chomp($line=$_);
+	if ($line =~ /^([^=]+)\s*=\s*(.*$)/) {
+		my ($var,$val)=($1,$2);
+		if (!defined($var) || !defined($val)) {
+			next;
+		}
+		if ($opt_v>0) {
+			printf STDERR "config: '%s'='%s'\n", $var,$val;
+		}
+		$config{$var}=$val;
+	}
+}
+close(CONF);
+
+my $apiuser=$config{'apiuser'};
+my $apikey=$config{'apikey'};
+
+if (!defined($apiuser) || !defined($apikey)) {
+	die "apiuser and apikey must be defined in the config file: $conf";
+}
+
+my $api = WWW::Namecheap::API->new(
+	#System => 'test',
+	System => 'prod',
+	ApiUser => $config{'apiuser'},
+	ApiKey => $config{'apikey'},
+	DefaultIp => $config{'defaultip'},
+	#DefaultUser
+	#ApiUrl
+	#Agent
+);
+
+my $dns = $api->dns();
+
+my $domlist = $dns->getdomains();
+#print STDERR recurse_dump($domlist);
+#$VAR1 = {
+#          'Domain' => [
+#                      {
+#                        'AutoRenew' => 'false',
+#                        'Created' => '09/03/2015',
+#                        'Expires' => '09/03/2017',
+#                        'ID' => '16572847',
+#                        'IsExpired' => 'false',
+#                        'IsLocked' => 'false',
+#                        'IsOurDNS' => 'false',
+#                        'IsPremium' => 'false',
+#                        'Name' => 'freedaemonhosting.com',
+#                        'User' => 'fdh0',
+#                        'WhoisGuard' => 'NOTPRESENT'
+#                      },
+foreach my $dd (@{$domlist->{Domain}}) {
+	my %d = %{$dd};
+	printf STDERR "%9d %10s %s\n", $d{'ID'}, $d{'Expires'},
+	    $d{'Name'};
+	my $nslist = $dns->getnameservers(DomainName => $dom);
+	foreach my $nameserver (@{$nslist->{Nameserver}}) {
+		printf STDERR "%10snameserver %s\n", "",$nameserver;
+	}
+}
+
+#print STDERR recurse_dump($nslist);
+#$VAR1 = {
+#          'Domain' => 'fdh.bz',
+#          'IsPremiumDNS' => 'false',
+#          'IsUsingFreeDNS' => 'false',
+#          'IsUsingOurDNS' => 'false',
+#          'Nameserver' => [
+#                          'ns0.fdh.space',
+#                          'ns1.fdh.space',
+#                          'ns2.fdh.space'
+#                        ]
+#        };
+
+
+#my $hostlist = $dns->gethosts(DomainName => $dom);
+#print STDERR recurse_dump($hostlist);
+
+#my $ns = $api->ns();
+#my $nshost = $ns->getInfo(Nameserver => 'ns0.'.$dom);
+#print STDERR recurse_dump($nshost);
+
+
+sub
+recurse_dump
+{
+        my ($item) = @_;
+        my $d = Data::Dumper->new([$item]);
+        $d->Purity(1);
+        $d->Terse(0);
+        $d->Deepcopy(1);
+        $d->Indent(2);
+        $d->Sortkeys(1);
+        #$d->Deparse(1);
+        return $d->Dump();
+}
+

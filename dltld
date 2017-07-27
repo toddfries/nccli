@@ -1,0 +1,9 @@
+#!/bin/sh
+
+apiuser=""
+apikey=""
+. ~/.namecheap.conf
+username="fdh0"
+clientip="98.174.183.148"
+
+ftp -o "tld.list" "https://api.namecheap.com/xml.response?ApiUser=$apiuser&ApiKey=$apikey&UserName=$username&Command=namecheap.domains.gettldlist&ClientIp=$clientip"
