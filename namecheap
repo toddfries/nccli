@@ -39,6 +39,7 @@ if (! -f $conf) {
 }
 
 my %config;
+our %nscache;
 
 open(CONF,$conf);
 while(<CONF>) {
@@ -78,7 +79,8 @@ my $api = WWW::Namecheap::API->new(
 	#Agent
 );
 
-my $dns = $api->dns();
+our $dns = $api->dns();
+our $ns  = $api->ns();
 
 my $domlist = $dns->getdomains();
 #print STDERR recurse_dump($domlist);
@@ -99,11 +101,17 @@ my $domlist = $dns->getdomains();
 #                      },
 foreach my $dd (@{$domlist->{Domain}}) {
 	my %d = %{$dd};
+	my $dom = $d{'Name'};
 	printf STDERR "%9d %10s %s\n", $d{'ID'}, $d{'Expires'},
 	    $d{'Name'};
 	my $nslist = $dns->getnameservers(DomainName => $dom);
 	foreach my $nameserver (@{$nslist->{Nameserver}}) {
-		printf STDERR "%10snameserver %s\n", "",$nameserver;
+		printf STDERR "%10snameserver %s", "",$nameserver;
+		my $nshost = getnshostinfo($nameserver);
+		if (defined($nshost)) {
+			printf STDERR " %s", $nshost->{'IP'};
+		}
+		print STDERR "\n";
 	}
 }
 
@@ -124,11 +132,6 @@ foreach my $dd (@{$domlist->{Domain}}) {
 #my $hostlist = $dns->gethosts(DomainName => $dom);
 #print STDERR recurse_dump($hostlist);
 
-#my $ns = $api->ns();
-#my $nshost = $ns->getInfo(Nameserver => 'ns0.'.$dom);
-#print STDERR recurse_dump($nshost);
-
-
 sub
 recurse_dump
 {
@@ -143,3 +146,11 @@ recurse_dump
         return $d->Dump();
 }
 
+sub getnshostinfo {
+	my ($nameserver) = @_;
+	if (defined($nscache{$nameserver})) {
+		return $nscache{$nameserver};
+	}
+	$nscache{$nameserver} = $ns->getInfo(Nameserver => $nameserver);
+	return $nscache{$nameserver};
+}
